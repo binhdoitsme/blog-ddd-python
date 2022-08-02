@@ -1,0 +1,14 @@
+[tool.black]
+line-length = 89
+
+[tool.pyright]
+reportTypedDictNotRequiredAccess = "error"
+
+[tool.pylint.basic]
+docstring-min-length = -1
+
+[tool.pylint.MASTER]
+disable="C0114"# missing-module-docstring
+
+[tool.isort]
+profile = "black"
