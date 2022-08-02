@@ -19,8 +19,9 @@ class BlogHistory:
 
     @classmethod
     def from_dict(cls, props: Dict[str, Any]):
-        assert fields(cls).issubset(set(props.keys()))
-        return BlogHistory(**{k: v for k, v in props.items() if k in fields(cls)})
+        own_fields = fields(cls)
+        assert own_fields.issubset(set(props.keys()))
+        return BlogHistory(**{k: v for k, v in props.items() if k in own_fields})
 
 
 class BlogId(Id[int]):

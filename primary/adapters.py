@@ -1,9 +1,9 @@
 from datetime import datetime
 from typing import Generic, Optional, TypeVar
-from fastapi import HTTPException
 
-from fastapi_class.routable import Routable
+from fastapi import HTTPException
 from fastapi_class.decorators import get
+from fastapi_class.routable import Routable
 from pydantic import BaseModel
 
 from application import BlogDto, BlogService
