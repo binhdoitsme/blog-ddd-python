@@ -1,7 +1,9 @@
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional
+from functools import partial
+from typing import Any, Dict, List, Optional, Sequence
 
 from sqlalchemy import BIGINT, INT, TIMESTAMP, Column, String, asc, desc
+import sqlalchemy
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.declarative import as_declarative, declared_attr
 from sqlalchemy.orm import Session
@@ -9,7 +11,7 @@ from sqlalchemy.orm import Session
 from domain.blog import Blog, BlogId, BlogRepository
 from domain.exceptions import RepositoryError
 from domain.user import User, UserId, UserRepository
-from utilities.db import SupportsPaging
+from utilities.db import LazySequence
 from utilities.exceptions import mask
 from utilities.strings import ne, wraps_name
 from utilities.typings import properties
@@ -29,7 +31,9 @@ class BlogHistoryRecord(Base):
     title = Column("title", String(127))
     content = Column("content", String(1024))
     created_by = Column("created_by", INT)
-    timestamp = Column("timestamp", TIMESTAMP, primary_key=True, default=datetime.utcnow())
+    timestamp = Column(
+        "timestamp", TIMESTAMP, primary_key=True, default=datetime.utcnow()
+    )
 
     def __init__(
         self, /, blog_id: int, title: str, content: str, created_by: int
@@ -48,7 +52,7 @@ class BlogHistoryRecord(Base):
         }
 
 
-class SQLABlogRepository(BlogRepository, SupportsPaging):
+class SQLABlogRepository(BlogRepository):
     default_orderings = [
         desc(BlogHistoryRecord.blog_id),
         asc(BlogHistoryRecord.timestamp),
@@ -58,14 +62,6 @@ class SQLABlogRepository(BlogRepository, SupportsPaging):
         self.session = session
         self._page = None
         self._page_size = None
-
-    def page(self, page=1) -> SupportsPaging:
-        self._page = page
-        return self
-
-    def page_size(self, size=25) -> SupportsPaging:
-        self._page_size = size
-        return self
 
     def save(self, blog: Blog) -> None:
         record = BlogHistoryRecord(
@@ -104,22 +100,29 @@ class SQLABlogRepository(BlogRepository, SupportsPaging):
             )
             results.append(blog)
         return results
+    
+    def to_paging(self, slice: slice):
+        start_index, stop_index = slice.start, slice.stop
+        page_size = stop_index - start_index
+        def apply_paging(query: sqlalchemy.orm.Query):
+            return query.limit(page_size).offset(start_index)
+        return apply_paging
+    
+    def get_sliced_result(self, slice: slice, query: sqlalchemy.orm.Query):
+        records = self.to_paging(slice)(query).all()
+        return self.to_domain(records)
 
     @mask(from_=SQLAlchemyError, to_=RepositoryError)
-    def find(self) -> Iterable[Blog]:
-        blog_history_query = self.session.query(BlogHistoryRecord)
-        blog_history_query = blog_history_query.order_by(*self.default_orderings)
-        if self._page and self._page_size:
-            limit = self._page_size
-            offset = self._page_size * (self._page - 1)
-            blog_history_query = blog_history_query.limit(limit).offset(offset)
-        return self.to_domain(blog_history_query.all())
+    def find(self) -> Sequence[Blog]:
+        query = self.session.query(BlogHistoryRecord)
+        query = query.order_by(*self.default_orderings)
+        return LazySequence(populator=partial(self.get_sliced_result, query=query))
 
-    def find_by(self, **matcher: Dict[str, Any]) -> Iterable[Blog]:
+    def find_by(self, **matcher: Dict[str, Any]) -> Sequence[Blog]:
         assert set(matcher.keys()).issubset(properties(Blog))
         query = self.session.query(BlogHistoryRecord).filter_by(**matcher)
-        blog_history = query.order_by(*self.default_orderings).all()
-        return self.to_domain(blog_history)
+        query = query.order_by(*self.default_orderings)
+        return LazySequence(populator=self.get_sliced_result)
 
 
 class UserRecord(Base):

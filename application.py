@@ -4,7 +4,6 @@ from typing import Any, Dict, Iterable, List, NamedTuple, Optional
 
 from domain.blog import Blog, BlogRepository
 from domain.user import User, UserId, UserRepository
-from utilities.db import Paged
 from utilities.typings import with_kwargs
 
 
@@ -59,8 +58,21 @@ class BlogService:
         return self.dto_assembler.to_dto(blog, user)
 
     def get_blogs(self, page=1, page_size=25) -> Iterable[BlogDto]:
-        repo: BlogRepository = Paged(self.blog_repository).by(page, page_size)
-        blogs = repo.find()
+        """
+        In `BlogRepository`:
+        ```
+        class PageableDbCollection:
+            def __init__(self, list_converter: Callable[..., T]):
+                self.convert_list = list_converter
+            
+            def __getitem__(self, key: slice) -> T: ...
+        
+        blogs = self.blog_repository.find()[since_index:before_index]
+        ```
+        """
+        start_index = page_size * (page - 1)
+        end_index = start_index + page_size
+        blogs = self.blog_repository.find()[start_index:end_index]
         blogs_by_user: Dict[UserId, List[Blog]] = dict()
         for blog in blogs:
             user_id = blog.created_by

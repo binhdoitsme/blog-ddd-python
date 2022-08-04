@@ -3,5 +3,5 @@ from module import Module
 
 
 if __name__ == "__main__":
-    load_dotenv()
+    load_dotenv(".env.local")
     Module().run()

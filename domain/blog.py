@@ -1,7 +1,7 @@
 import abc
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from domain.user import UserId
 from utilities.domain import Id
@@ -139,9 +139,9 @@ class BlogRepository(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def find(self) -> Iterable[Blog]:
+    def find(self) -> Sequence[Blog]:
         ...
 
     @abc.abstractmethod
-    def find_by(self, **matcher: Dict[str, Any]) -> Iterable[Blog]:
+    def find_by(self, **matcher: Dict[str, Any]) -> Sequence[Blog]:
         ...
