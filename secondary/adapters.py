@@ -3,15 +3,14 @@ from functools import partial
 from typing import Any, Dict, List, Optional, Sequence
 
 from sqlalchemy import BIGINT, INT, TIMESTAMP, Column, String, asc, desc
-import sqlalchemy
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.declarative import as_declarative, declared_attr
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Query, Session
 
 from domain.blog import Blog, BlogId, BlogRepository
 from domain.exceptions import RepositoryError
 from domain.user import User, UserId, UserRepository
-from utilities.db import LazySequence
+from utilities.db import LazySequence, SupportsPaging
 from utilities.exceptions import mask
 from utilities.strings import ne, wraps_name
 from utilities.typings import properties
@@ -52,7 +51,7 @@ class BlogHistoryRecord(Base):
         }
 
 
-class SQLABlogRepository(BlogRepository):
+class SQLABlogRepository(BlogRepository, SupportsPaging):
     default_orderings = [
         desc(BlogHistoryRecord.blog_id),
         asc(BlogHistoryRecord.timestamp),
@@ -101,14 +100,7 @@ class SQLABlogRepository(BlogRepository):
             results.append(blog)
         return results
     
-    def to_paging(self, slice: slice):
-        start_index, stop_index = slice.start, slice.stop
-        page_size = stop_index - start_index
-        def apply_paging(query: sqlalchemy.orm.Query):
-            return query.limit(page_size).offset(start_index)
-        return apply_paging
-    
-    def get_sliced_result(self, slice: slice, query: sqlalchemy.orm.Query):
+    def get_sliced_result(self, slice: slice, query: Query):
         records = self.to_paging(slice)(query).all()
         return self.to_domain(records)
 
@@ -122,7 +114,7 @@ class SQLABlogRepository(BlogRepository):
         assert set(matcher.keys()).issubset(properties(Blog))
         query = self.session.query(BlogHistoryRecord).filter_by(**matcher)
         query = query.order_by(*self.default_orderings)
-        return LazySequence(populator=self.get_sliced_result)
+        return LazySequence(populator=partial(self.get_sliced_result, query=query))
 
 
 class UserRecord(Base):
